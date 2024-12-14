@@ -99,8 +99,8 @@ type EvaluateInput struct {
 	// Content is the content to evaluate
 	Content []Content
 
-	// Policies is a list of policy names to use. If empty, all policies will be used
-	Policies []string
+	// PolicyId is the ID of the policy to use
+	PolicyId string
 }
 
 type EvaluateOutput struct {

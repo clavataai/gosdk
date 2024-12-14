@@ -106,7 +106,7 @@ func (c *client) Evaluate(ctx context.Context, inputs *EvaluateInput) (*Evaluate
 
 	req := &pb.EvaluateRequest{
 		ContentData: contentInputs,
-		PolicyKeys:  inputs.Policies,
+		PolicyId:    inputs.PolicyId,
 	}
 
 	stream, err := c.stub.Evaluate(ctx, req)
