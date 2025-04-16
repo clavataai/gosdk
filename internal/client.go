@@ -8,7 +8,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	"github.com/clavataai/monorail/libs/containers/slices"
+	"github.com/clavataai/monorail/libs/containers/itertools"
 	pb "github.com/clavataai/monorail/libs/protobufs/gateway/v1"
 	sharedpb "github.com/clavataai/monorail/libs/protobufs/shared/v1"
 )
@@ -67,7 +67,7 @@ func (c *client) Evaluate(ctx context.Context, inputs *EvaluateInput) (*Evaluate
 	// The content and policy names are a N:M relationship. So for each content and each policy, we need to evaluate
 	// the content against the policy. We'll generate one input to the gRPC call for each combination of content and
 	// policy.
-	contentInputs, err := slices.MapWithError(inputs.Content, func(c Content) (*sharedpb.ContentData, error) {
+	contentInputs, err := itertools.MapWithError(inputs.Content, func(c Content) (*sharedpb.ContentData, error) {
 		// For each piece of content, we need to use the mode to figure out which gRPC oneOf field to populate
 		var contentData *sharedpb.ContentData
 		switch c.Mode {
