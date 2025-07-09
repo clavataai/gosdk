@@ -2,6 +2,7 @@ package clavata
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -360,4 +361,35 @@ func createWireTransmissionError(failureType gatewayv1.PrecheckFailureType, cont
 	}
 
 	return st.Err()
+}
+
+// ExampleContentError demonstrates how to handle precheck failures.
+func ExampleContentError() {
+	// Simulate an error that might occur during content evaluation
+	err := errors.New("simulated precheck failure")
+
+	// In practice, this would be an error returned from client.EvaluateOne()
+	// or client.Evaluate()
+
+	// Check for specific content errors
+	if errors.Is(err, ErrContentCSAM) {
+		fmt.Println("Content contains CSAM and cannot be evaluated")
+		return
+	}
+
+	if errors.Is(err, ErrContentInvalidFormat) {
+		fmt.Println("Content has an invalid format")
+		return
+	}
+
+	// Or extract the ContentError for more details
+	var contentErr *ContentError
+	if errors.As(err, &contentErr) {
+		fmt.Printf("Content %s failed precheck: %v\n", contentErr.ContentHash, contentErr.Err)
+		return
+	}
+
+	// Handle other types of errors
+	fmt.Printf("Other error: %v\n", err)
+	// Output: Other error: simulated precheck failure
 }
