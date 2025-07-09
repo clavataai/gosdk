@@ -333,11 +333,14 @@ func (c *Client) CreateJob(ctx context.Context, req *CreateJobRequest) (*Job, er
 	}
 
 	resp, err := c.gateway.CreateJob(ctx, protoReq)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create job: %w", err)
+	if err == nil {
+		return new(Job).fromProto(resp.GetJob()), nil
 	}
 
-	return new(Job).fromProto(resp.GetJob()), nil
+	// If we get to here, the error is not nil. We need to check if it's a precheck failure.
+	// The helper function will return a ContentError if it's a precheck failure, or the original error
+	// if it's not.
+	return nil, lookForPrecheckFailures(err)
 }
 
 // GetJob retrieves a job by its UUID
@@ -416,16 +419,25 @@ func (c *Client) Evaluate(ctx context.Context, req *EvaluateRequest) (chan Evalu
 		defer close(ch)
 		for {
 			protoResp, err := stream.Recv()
-			if err != nil {
-				if errors.Is(err, io.EOF) {
-					return
-				}
-				ch <- EvaluateResult{Error: err}
+			// NOTE: In this case, because the error handling is more complicated, we're checking for nil rather
+			// than the usual "not-nil" check.
+			if err == nil {
+				report := new(Report).fromProto(protoResp.GetPolicyEvaluationReport())
+				ch <- EvaluateResult{Report: report}
+				continue
 			}
 
-			report := new(Report).fromProto(protoResp.GetPolicyEvaluationReport())
-			ch <- EvaluateResult{Report: report}
+			// An error occurred. If it's EOF, we're fine as this is a normal termination of the stream.
+			if errors.Is(err, io.EOF) {
+				return
+			}
+
+			// If we get to here, the error is not EOF. We need to check if it's a precheck failure.
+			// The helper function will return a ContentError if it's a precheck failure, or the original error
+			// if it's not.
+			ch <- EvaluateResult{Error: lookForPrecheckFailures(err)}
 		}
+
 	}()
 	return ch, nil
 }

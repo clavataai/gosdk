@@ -178,7 +178,7 @@ func TestClient_CreateJob(t *testing.T) {
 		mockSetup func(*mockGatewayClient)
 		wantJob   *Job
 		wantErr   bool
-		errMsg    string
+		err       error
 	}{
 		{
 			name: "successful job creation",
@@ -267,7 +267,7 @@ func TestClient_CreateJob(t *testing.T) {
 				}
 			},
 			wantErr: true,
-			errMsg:  "failed to create job",
+			err:     status.Error(codes.InvalidArgument, "invalid policy ID"),
 		},
 	}
 
@@ -286,7 +286,8 @@ func TestClient_CreateJob(t *testing.T) {
 			job, err := client.CreateJob(context.Background(), tt.request)
 			if tt.wantErr {
 				assert.Error(t, err)
-				assert.Contains(t, err.Error(), tt.errMsg)
+				assert.ErrorIs(t, err, tt.err)
+				assert.Nil(t, job)
 			} else {
 				assert.NoError(t, err)
 				assert.Equal(t, tt.wantJob.ID, job.ID)
