@@ -7,10 +7,13 @@ import (
 	"fmt"
 	"io"
 	"iter"
+	"os"
+	"os/signal"
+	"sync"
+	"syscall"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
-	"go.skia.org/infra/go/cleanup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
@@ -283,10 +286,41 @@ func (c *Client) Close() error {
 	return nil
 }
 
+var (
+	cleanupHandlers []func()
+	cleanupMutex    sync.Mutex
+	cleanupOnce     sync.Once
+)
+
+// setupCleanupHandler sets up a signal handler for cleanup functions
+func setupCleanupHandler() {
+	cleanupOnce.Do(func() {
+		c := make(chan os.Signal, 1)
+		signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+		go func() {
+			<-c
+			cleanupMutex.Lock()
+			defer cleanupMutex.Unlock()
+			for _, handler := range cleanupHandlers {
+				handler()
+			}
+			os.Exit(0)
+		}()
+	})
+}
+
+// addCleanupHandler adds a cleanup function to be called on exit
+func addCleanupHandler(handler func()) {
+	cleanupMutex.Lock()
+	defer cleanupMutex.Unlock()
+	cleanupHandlers = append(cleanupHandlers, handler)
+	setupCleanupHandler()
+}
+
 // CloseOnExit registers the client for cleanup. This can be useful if you are using a long
 // lived instance of the client and want to make sure it is always closed before exit.
 func (c *Client) CloseOnExit() {
-	cleanup.AtExit(func() {
+	addCleanupHandler(func() {
 		c.Close()
 	})
 }

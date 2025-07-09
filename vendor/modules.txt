@@ -14,18 +14,6 @@ github.com/grpc-ecosystem/grpc-gateway/v2/internal/httprule
 github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2/options
 github.com/grpc-ecosystem/grpc-gateway/v2/runtime
 github.com/grpc-ecosystem/grpc-gateway/v2/utilities
-# github.com/hashicorp/errwrap v1.1.0
-## explicit
-github.com/hashicorp/errwrap
-# github.com/hashicorp/go-multierror v1.1.1
-## explicit; go 1.13
-github.com/hashicorp/go-multierror
-# github.com/jcgregorio/logger v0.1.3
-## explicit; go 1.18
-github.com/jcgregorio/logger
-# github.com/jcgregorio/slog v0.0.0-20190423190439-e6f2d537f900
-## explicit
-github.com/jcgregorio/slog
 # github.com/kr/text v0.2.0
 ## explicit
 # github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2
@@ -37,17 +25,6 @@ github.com/pmezard/go-difflib/difflib
 ## explicit; go 1.17
 github.com/stretchr/testify/assert
 github.com/stretchr/testify/assert/yaml
-# github.com/zeebo/bencode v1.0.0
-## explicit
-github.com/zeebo/bencode
-# go.skia.org/infra v0.0.0-20250708213113-87a300faac29
-## explicit; go 1.24.2
-go.skia.org/infra/go/cleanup
-go.skia.org/infra/go/skerr
-go.skia.org/infra/go/sklog
-go.skia.org/infra/go/sklog/sklogimpl
-go.skia.org/infra/go/sklog/stdlogging
-go.skia.org/infra/go/util
 # golang.org/x/net v0.38.0
 ## explicit; go 1.23.0
 golang.org/x/net/http/httpguts
@@ -57,9 +34,6 @@ golang.org/x/net/idna
 golang.org/x/net/internal/httpcommon
 golang.org/x/net/internal/timeseries
 golang.org/x/net/trace
-# golang.org/x/sync v0.15.0
-## explicit; go 1.23.0
-golang.org/x/sync/errgroup
 # golang.org/x/sys v0.31.0
 ## explicit; go 1.23.0
 golang.org/x/sys/unix
