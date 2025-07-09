@@ -46,6 +46,26 @@ func main() {
 }
 ```
 
+## Builders
+
+To make it easier to construct complex requests, the SDK provides request **builders** for the `CreateJob`, `Evaluate` and `ListJobs` calls. Here's an example of how to use `EvaluateRequestBuilder` to simplify creation:
+
+```go
+b := NewEvaluateRequestBuilder()
+b.PolicyID("my-policy-id").AddContent(
+    NewTextContent("Hello world!"),
+    NewImageContent(imageData),
+    NewImageURLContent("https://foobar.com/path/to/image.webp")
+).Expedited(true)
+
+request := b.Build()
+
+// Now you can use the request with:
+client.Evaluate(request)
+```
+
+> Note: You can always construct request objects directly. The builders are just a different API that avoids the need to allocate slices and other complex objects.
+
 ## Retry Configuration
 
 The SDK automatically retries requests that fail due to rate limits (HTTP 429 / gRPC RESOURCE_EXHAUSTED). By default, it uses exponential backoff with the following settings:
