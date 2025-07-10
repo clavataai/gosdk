@@ -72,6 +72,12 @@ func (j JobStatus) toProto() sharedv1.JobStatus {
 
 // Contenter is an interface that represents a content input to send to the API.
 type Contenter interface {
+	// AddMetadata allows you to add a key/value pair to the content. This metadata will be included
+	// in the `Report` for this piece of content, allowing you to include IDs or other information
+	// that is meaningful to your system.
+	AddMetadata(key, value string) Contenter
+
+	// toProtoContentData prepares the content for transmission to the API.
 	toProtoContentData() (*sharedv1.ContentData, error)
 }
 
@@ -81,12 +87,22 @@ func NewTextContent(text string) Contenter {
 }
 
 type textContent struct {
-	text string
+	text     string
+	metadata map[string]string
+}
+
+// AddMetadata allows you to add a single key/value pair to the content. It can be called multiple
+// times to add multiple key/value pairs, but if two keys are the same, the last value supplied will
+// take precedence.
+func (t *textContent) AddMetadata(key, value string) Contenter {
+	t.metadata[key] = value
+	return t
 }
 
 func (t *textContent) toProtoContentData() (*sharedv1.ContentData, error) {
 	return &sharedv1.ContentData{
-		Content: &sharedv1.ContentData_Text{Text: t.text},
+		Content:  &sharedv1.ContentData_Text{Text: t.text},
+		Metadata: t.metadata,
 	}, nil
 }
 
@@ -97,11 +113,21 @@ func NewImageContent(imageData []byte) Contenter {
 
 type imageContent struct {
 	imageData []byte
+	metadata  map[string]string
+}
+
+// AddMetadata allows you to add a single key/value pair to the content. It can be called multiple
+// times to add multiple key/value pairs, but if two keys are the same, the last value supplied will
+// take precedence.
+func (i *imageContent) AddMetadata(key, value string) Contenter {
+	i.metadata[key] = value
+	return i
 }
 
 func (i *imageContent) toProtoContentData() (*sharedv1.ContentData, error) {
 	return &sharedv1.ContentData{
-		Content: &sharedv1.ContentData_Image{Image: i.imageData},
+		Content:  &sharedv1.ContentData_Image{Image: i.imageData},
+		Metadata: i.metadata,
 	}, nil
 }
 
@@ -113,6 +139,15 @@ func NewImageFileContent(imageFile string) Contenter {
 
 type imageFileContent struct {
 	imageFile string
+	metadata  map[string]string
+}
+
+// AddMetadata allows you to add a single key/value pair to the content. It can be called multiple
+// times to add multiple key/value pairs, but if two keys are the same, the last value supplied will
+// take precedence.
+func (i *imageFileContent) AddMetadata(key, value string) Contenter {
+	i.metadata[key] = value
+	return i
 }
 
 func (i *imageFileContent) toProtoContentData() (*sharedv1.ContentData, error) {
@@ -122,7 +157,8 @@ func (i *imageFileContent) toProtoContentData() (*sharedv1.ContentData, error) {
 		return nil, err
 	}
 	return &sharedv1.ContentData{
-		Content: &sharedv1.ContentData_Image{Image: imageData},
+		Content:  &sharedv1.ContentData_Image{Image: imageData},
+		Metadata: i.metadata,
 	}, nil
 }
 
@@ -133,28 +169,42 @@ func NewImageURLContent(imageURL string) Contenter {
 
 type imageURLContent struct {
 	imageURL string
+	metadata map[string]string
+}
+
+// AddMetadata allows you to add a single key/value pair to the content. It can be called multiple
+// times to add multiple key/value pairs, but if two keys are the same, the last value supplied will
+// take precedence.
+func (i *imageURLContent) AddMetadata(key, value string) Contenter {
+	i.metadata[key] = value
+	return i
 }
 
 func (i *imageURLContent) toProtoContentData() (*sharedv1.ContentData, error) {
 	return &sharedv1.ContentData{
-		Content: &sharedv1.ContentData_ImageUrl{ImageUrl: i.imageURL},
+		Content:  &sharedv1.ContentData_ImageUrl{ImageUrl: i.imageURL},
+		Metadata: i.metadata,
 	}, nil
 }
 
 // JobOptions allow you to configure certain aspects of how the job is processed.
 type JobOptions struct {
-	// If set, the job will be evaluated with the given threshold. A threshold of 0.0 will be considered unset.
+	// If set, the job will be evaluated with the given threshold. A threshold of 0.0 will be
+	// considered unset and the server default will be used (0.50).
 	Threshold float64
-	// If set, this will prioritze speed over accuracy. In our testing, the difference is minimal and this may
-	// become the default in v2.
+	// If set, this will prioritze speed over accuracy. In most cases, the accuracy difference is
+	// minimal. For image content, expedited mode generally improves latency by 20-30%.
 	Expedited bool
 }
 
 // EvaluateRequest is the request type for the Evaluate method.
 type EvaluateRequest struct {
-	Content  []Contenter
+	// The content to evaluate.
+	Content []Contenter
+	// The ID of the policy to evaluate all of the supplied content against.
 	PolicyID string
-	Options  JobOptions
+	// Options that will impact how the job is evaluated.
+	Options JobOptions
 }
 
 func (e *EvaluateRequest) toProto() (*gatewayv1.EvaluateRequest, error) {
@@ -270,14 +320,21 @@ func (o Outcome) fromProto(proto sharedv1.Outcome) Outcome {
 
 // LabelReport provides details about the evaluation of a single piece of content against a single label's definition.
 type LabelReport struct {
-	// LabelName is the name of the label that was evaluated as defined in the policy.
+	// LabelName is the name of the label that was evaluated as defined in the policy. This field
+	// will always match the key it is associated with in the `Matches` map of the `Report`.
 	LabelName string
-	// Score is the score of the label. Can be between 0.0 and 1.0. In rare cases, the score may be -1.0, which means
-	// that evaluation failed.
+	// Score is the score of the label. Can be between 0.0 and 1.0. In rare cases, the score may be
+	// -1.0, which means that evaluation failed.
 	Score float64
-	// Outcome is the outcome of the label. If the score is greater than the threshold, the outcome will be TRUE.
+	// Outcome is the outcome of the label. If the score is greater than the threshold, the outcome
+	// will be TRUE.
 	Outcome Outcome
-	// Actions are the actions that were associated with the label in the policy.
+	// Actions is the string that was associated with the `LABEL` in the policy.
+	//
+	// Example:
+	// LABEL "Foo": "Action1, Action2" { ... }
+	//
+	// In this case, the Actions field will contain "Action1, Action2".
 	Actions string
 }
 
@@ -377,26 +434,39 @@ func (j *Job) fromProto(proto *sharedv1.Job) *Job {
 	return j
 }
 
-// A TimeRange is a range of time. Used to filter jobs by creation, update, or completion time.
+// A TimeRange is a range of time. Used to filter jobs by creation, update, or completion time. Note
+// that if you set `Start` or `End` but not both, the resulting filter will be treated like a simple
+// greater than or less than filter rather than requiring that the time is within the range.
 type TimeRange struct {
+	// Start is the start of the time range.
 	Start time.Time
-	End   time.Time
+	// End is the end of the time range.
+	End time.Time
+	// Inclusive is whether the range is inclusive. If true, the range will include the start and
+	// end times. Ranges are exclusive by default.
+	Inclusive bool
 }
 
 func (t *TimeRange) toProto() *sharedv1.TimeRange {
 	return &sharedv1.TimeRange{
-		Start: timestamppb.New(t.Start),
-		End:   timestamppb.New(t.End),
+		Start:     timestamppb.New(t.Start),
+		End:       timestamppb.New(t.End),
+		Inclusive: t.Inclusive,
 	}
 }
 
 // ListJobsQuery is the query type for the ListJobs method.
 type ListJobsQuery struct {
-	CreatedAt   TimeRange
-	UpdatedAt   TimeRange
+	// Filter on the time the job was created.
+	CreatedAt TimeRange
+	// Filter on the time the job was last updated.
+	UpdatedAt TimeRange
+	// Filter on the time the job was completed.
 	CompletedAt TimeRange
-	Status      JobStatus
-	PolicyID    string
+	// Filter on the status of the job.
+	Status JobStatus
+	// If set, only jobs that used this PolicyID will be returned.
+	PolicyID string
 }
 
 func (l *ListJobsQuery) toProto() *gatewayv1.ListJobsRequest_Query {
@@ -416,9 +486,23 @@ func (l *ListJobsQuery) toProto() *gatewayv1.ListJobsRequest_Query {
 
 // ListJobsRequest is the request type for the ListJobs method.
 type ListJobsRequest struct {
-	Query     ListJobsQuery
-	PageSize  int
+	// The query to use to filter the jobs.
+	Query ListJobsQuery
+	// The maximum number of jobs to return on a single page. If set to `0` this field will be
+	// considered unset and the default will be used.(Default: 1000)
+	PageSize int
+	// The token to use to get the next page of results. This token will be returned by the server
+	// in the `NextPageToken` field of the response. It should be passed back to the server in the
+	// `PageToken` field of the next request to get the next page of results.
 	PageToken string
+}
+
+// NewListJobsRequest creates a new ListJobsRequest with the given query and page size.
+func NewListJobsRequest(query ListJobsQuery, pageSize int) *ListJobsRequest {
+	return &ListJobsRequest{
+		Query:    query,
+		PageSize: pageSize,
+	}
 }
 
 func (l *ListJobsRequest) toProto() (*gatewayv1.ListJobsRequest, error) {
@@ -429,6 +513,28 @@ func (l *ListJobsRequest) toProto() (*gatewayv1.ListJobsRequest, error) {
 		PageSize:  int32(l.PageSize),
 		PageToken: l.PageToken,
 	}, nil
+}
+
+// NextPage creates a new ListJobsRequest with the same query and page size, but with the page token
+// set to the provided token. This can be used to get the next page of results from the current response.
+//
+// Example:
+//
+//	builder := NewListJobsRequestBuilder()
+//	req := builder.Query(ListJobsQuery{Status: JobStatusRunning}).Build()
+//	resp, err := c.ListJobs(ctx, req)
+//	if err != nil {
+//		return err
+//	}
+//
+//	nextPageReq := req.NextPage(resp)
+//	resp, err = c.ListJobs(ctx, nextPageReq)
+func (l *ListJobsRequest) NextPage(resp *ListJobsResponse) *ListJobsRequest {
+	return &ListJobsRequest{
+		Query:     l.Query,
+		PageSize:  l.PageSize,
+		PageToken: resp.NextPageToken,
+	}
 }
 
 // ListJobsResponse is the response type for the ListJobs method. It contains the list of jobs that match the query,
@@ -447,12 +553,13 @@ func (l *ListJobsResponse) fromProto(proto *gatewayv1.ListJobsResponse) *ListJob
 	return l
 }
 
-// NextPage is a helper method that can be used to get the next page of results from the current response.
-// You'll need to provide the current client for this method to use.
-func (l *ListJobsResponse) NextPage(ctx context.Context, c *Client) (*ListJobsResponse, error) {
-	return c.ListJobs(ctx, &ListJobsRequest{
-		PageToken: l.NextPageToken,
-	})
+// NextPage is a helper method that can be used to get the next page of results from the current
+// response. You'll need to provide it with the Clavata client instance and previous request.
+func (l *ListJobsResponse) NextPage(
+	ctx context.Context, c *Client, req *ListJobsRequest,
+) (*ListJobsResponse, error) {
+	req.PageToken = l.NextPageToken
+	return c.ListJobs(ctx, req)
 }
 
 // Builders for requests
@@ -606,15 +713,32 @@ func (b *EvaluateRequestBuilder) Build() *EvaluateRequest {
 	}
 }
 
-// ListJobsRequestBuilder simplifies the construction of a ListJobsRequest.
-// First, create the builder with `NewListJobsRequestBuilder()`.
-// Then, use the builder to set the query, page size, and page token.
-// Finally, call `Build()` to create the request.
+// ListJobsRequestBuilder simplifies the construction of a ListJobsRequest. First, create the
+// builder with `NewListJobsRequestBuilder()`. Then, use the builder to set the query, page size,
+// and page token. Finally, call `Build()` to create the request.
 //
 // Example:
 //
 //	builder := NewListJobsRequestBuilder()
 //	req := builder.Query(ListJobsQuery{Status: JobStatusRunning}).Build()
+//
+// This builder, in particular, can be helpful for dealing with pagination as it makes it easy to
+// build requests with the same query and page size, but an updated page token.
+// For example:
+//
+//	builder := NewListJobsRequestBuilder()
+//	builder = builder.Query(ListJobsQuery{Status: JobStatusRunning}).PageSize(100)
+//	resp, err := c.ListJobs(ctx, builder.Build())
+//	if err != nil {
+//		return err
+//	}
+//
+//	resp, err = c.ListJobs(ctx, builder.NextPage(resp).Build())
+//	if err != nil {
+//		return err
+//	}
+//
+// And so on.
 type ListJobsRequestBuilder struct {
 	query     ListJobsQuery
 	pageSize  int
