@@ -22,7 +22,7 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
-	gatewayv1 "github.com/clavataai/monorail/libs/protobufs/gateway/v1"
+	gatewayv1 "github.com/clavataai/gosdk/internal/protobufs/gateway/v1"
 )
 
 const (

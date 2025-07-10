@@ -6,8 +6,8 @@ import (
 	"os"
 	"time"
 
-	gatewayv1 "github.com/clavataai/monorail/libs/protobufs/gateway/v1"
-	sharedv1 "github.com/clavataai/monorail/libs/protobufs/shared/v1"
+	gatewayv1 "github.com/clavataai/gosdk/internal/protobufs/gateway/v1"
+	sharedv1 "github.com/clavataai/gosdk/internal/protobufs/shared/v1"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 

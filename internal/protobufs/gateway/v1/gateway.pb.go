@@ -7,7 +7,7 @@
 package v1
 
 import (
-	v1 "github.com/clavataai/monorail/libs/protobufs/shared/v1"
+	v1 "github.com/clavataai/gosdk/internal/protobufs/shared/v1"
 	_ "github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2/options"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
 	_ "google.golang.org/genproto/googleapis/api/visibility"

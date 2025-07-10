@@ -13,7 +13,7 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/structpb"
 
-	gatewayv1 "github.com/clavataai/monorail/libs/protobufs/gateway/v1"
+	gatewayv1 "github.com/clavataai/gosdk/internal/protobufs/gateway/v1"
 )
 
 func TestLookForPrecheckFailures(t *testing.T) {
