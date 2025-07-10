@@ -373,7 +373,7 @@ type LabelReport struct {
 
 ## License
 
-This SDK is distributed under the MIT License. See [LICENSE](LICENSE) for more information.
+This SDK is distributed under the Apache 2.0 License. See [LICENSE](./LICENSE-2.0.txt) for more information.
 
 ---
 
