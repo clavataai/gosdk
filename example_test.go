@@ -59,3 +59,17 @@ func ExampleClient_EvaluateOne() {
 	fmt.Printf("Content hash: %s\n", report.ContentHash)
 	fmt.Printf("Overall result: %s\n", report.Result)
 }
+
+// ExampleContenter_AddMetadata demonstrates how to add metadata to content.
+func ExampleContenter_AddMetadata() {
+	content := clavata.NewTextContent("Hello, world!")
+	content.
+		AddMetadata("user_id", "user-12345").
+		AddMetadata("post_id", "post-67890").
+		AddMetadata("timestamp", "2024-01-15T14:30:00Z").
+		AddMetadata("ip_address", "192.168.1.1")
+
+	fmt.Printf("Content: %v\n", content)
+	// Output:
+	// Content: &{Hello, world! map[ip_address:192.168.1.1 post_id:post-67890 timestamp:2024-01-15T14:30:00Z user_id:user-12345]}
+}

@@ -256,6 +256,50 @@ func TestClient_CreateJob(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name: "with content metadata",
+			request: &CreateJobRequest{
+				PolicyID: "policy-123",
+				Content: []Contenter{
+					NewTextContent("test content").
+						AddMetadata("user_id", "user-456").
+						AddMetadata("session_id", "session-789"),
+					NewImageContent([]byte{0xFF, 0xD8}).
+						AddMetadata("image_type", "profile_photo"),
+				},
+			},
+			mockSetup: func(m *mockGatewayClient) {
+				m.createJobFunc = func(ctx context.Context, req *gatewayv1.CreateJobRequest, opts ...grpc.CallOption) (*gatewayv1.CreateJobResponse, error) {
+					// Verify metadata was included in request
+					assert.Len(t, req.ContentData, 2)
+
+					// Check first content (text) metadata
+					assert.NotNil(t, req.ContentData[0].Metadata)
+					assert.Equal(t, "user-456", req.ContentData[0].Metadata["user_id"])
+					assert.Equal(t, "session-789", req.ContentData[0].Metadata["session_id"])
+
+					// Check second content (image) metadata
+					assert.NotNil(t, req.ContentData[1].Metadata)
+					assert.Equal(t, "profile_photo", req.ContentData[1].Metadata["image_type"])
+
+					return &gatewayv1.CreateJobResponse{
+						Job: &sharedv1.Job{
+							JobUuid: "job-123",
+							Status:  sharedv1.JobStatus_JOB_STATUS_PENDING,
+							Created: timestamppb.New(mockTime),
+							Updated: timestamppb.New(mockTime),
+						},
+					}, nil
+				}
+			},
+			wantJob: &Job{
+				ID:        "job-123",
+				Status:    JobStatusPending,
+				CreatedAt: mockTime,
+				UpdatedAt: mockTime,
+			},
+			wantErr: false,
+		},
+		{
 			name: "grpc error",
 			request: &CreateJobRequest{
 				PolicyID: "policy-123",
@@ -442,6 +486,68 @@ func TestClient_Evaluate(t *testing.T) {
 			},
 			wantErr: true,
 		},
+		{
+			name: "with content metadata in response",
+			request: &EvaluateRequest{
+				PolicyID: "policy-123",
+				Content: []Contenter{
+					NewTextContent("content 1").
+						AddMetadata("content_id", "abc-123").
+						AddMetadata("user_id", "user-456"),
+					NewImageContent([]byte{0xFF, 0xD8}).
+						AddMetadata("content_id", "def-789").
+						AddMetadata("image_source", "upload"),
+				},
+			},
+			mockSetup: func(m *mockGatewayClient) {
+				m.evaluateFunc = func(ctx context.Context, req *gatewayv1.EvaluateRequest, opts ...grpc.CallOption) (gatewayv1.GatewayService_EvaluateClient, error) {
+					// Verify metadata was sent in request
+					assert.Len(t, req.ContentData, 2)
+					assert.Equal(t, "abc-123", req.ContentData[0].Metadata["content_id"])
+					assert.Equal(t, "user-456", req.ContentData[0].Metadata["user_id"])
+					assert.Equal(t, "def-789", req.ContentData[1].Metadata["content_id"])
+					assert.Equal(t, "upload", req.ContentData[1].Metadata["image_source"])
+
+					stream := &mockEvaluateClient{
+						responses: []*gatewayv1.EvaluateResponse{
+							{
+								JobUuid:     "job-123",
+								ContentHash: "hash1",
+								PolicyEvaluationReport: &sharedv1.PolicyEvaluationReport{
+									PolicyId: "policy-123",
+									ContentMetadata: map[string]string{
+										"content_id": "abc-123",
+										"user_id":    "user-456",
+									},
+									ReviewResult: &sharedv1.PolicyEvaluationReport_ReviewResult{
+										Outcome: sharedv1.Outcome_OUTCOME_FALSE,
+										Score:   0.2,
+									},
+								},
+							},
+							{
+								JobUuid:     "job-123",
+								ContentHash: "hash2",
+								PolicyEvaluationReport: &sharedv1.PolicyEvaluationReport{
+									PolicyId: "policy-123",
+									ContentMetadata: map[string]string{
+										"content_id":   "def-789",
+										"image_source": "upload",
+									},
+									ReviewResult: &sharedv1.PolicyEvaluationReport_ReviewResult{
+										Outcome: sharedv1.Outcome_OUTCOME_TRUE,
+										Score:   0.9,
+									},
+								},
+							},
+						},
+					}
+					return stream, nil
+				}
+			},
+			wantCount: 2,
+			wantErr:   false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -476,6 +582,17 @@ func TestClient_Evaluate(t *testing.T) {
 					} else {
 						assert.NotNil(t, result.Report)
 					}
+				}
+
+				// Special verification for metadata test case
+				if tt.name == "with content metadata in response" {
+					// First result should have metadata from first content
+					assert.Equal(t, "abc-123", results[0].Report.ContentMetadata["content_id"])
+					assert.Equal(t, "user-456", results[0].Report.ContentMetadata["user_id"])
+
+					// Second result should have metadata from second content
+					assert.Equal(t, "def-789", results[1].Report.ContentMetadata["content_id"])
+					assert.Equal(t, "upload", results[1].Report.ContentMetadata["image_source"])
 				}
 			}
 		})
@@ -543,6 +660,55 @@ func TestClient_EvaluateOne(t *testing.T) {
 			},
 			wantErr: true,
 		},
+		{
+			name:     "with content metadata",
+			policyID: "policy-123",
+			content: NewTextContent("test content").
+				AddMetadata("request_id", "req-123").
+				AddMetadata("user_id", "user-789"),
+			options: JobOptions{Threshold: 0.7},
+			mockSetup: func(m *mockGatewayClient) {
+				m.evaluateFunc = func(ctx context.Context, req *gatewayv1.EvaluateRequest, opts ...grpc.CallOption) (gatewayv1.GatewayService_EvaluateClient, error) {
+					// Verify metadata was sent
+					assert.Len(t, req.ContentData, 1)
+					assert.Equal(t, "req-123", req.ContentData[0].Metadata["request_id"])
+					assert.Equal(t, "user-789", req.ContentData[0].Metadata["user_id"])
+
+					stream := &mockEvaluateClient{
+						responses: []*gatewayv1.EvaluateResponse{
+							{
+								JobUuid:     "job-123",
+								ContentHash: "hash123",
+								PolicyEvaluationReport: &sharedv1.PolicyEvaluationReport{
+									PolicyId:  "policy-123",
+									Threshold: 0.7,
+									ContentMetadata: map[string]string{
+										"request_id": "req-123",
+										"user_id":    "user-789",
+									},
+									ReviewResult: &sharedv1.PolicyEvaluationReport_ReviewResult{
+										Outcome: sharedv1.Outcome_OUTCOME_FALSE,
+										Score:   0.45,
+									},
+									SectionEvaluationReports: []*sharedv1.PolicyEvaluationReport_SectionEvaluationReport{
+										{
+											Name:    "safe_content",
+											Message: "allow",
+											ReviewResult: &sharedv1.PolicyEvaluationReport_ReviewResult{
+												Outcome: sharedv1.Outcome_OUTCOME_FALSE,
+												Score:   0.45,
+											},
+										},
+									},
+								},
+							},
+						},
+					}
+					return stream, nil
+				}
+			},
+			wantErr: false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -564,6 +730,13 @@ func TestClient_EvaluateOne(t *testing.T) {
 				assert.NoError(t, err)
 				assert.NotNil(t, report)
 				assert.Equal(t, tt.policyID, report.PolicyID)
+
+				// Special verification for metadata test case
+				if tt.name == "with content metadata" {
+					assert.NotNil(t, report.ContentMetadata)
+					assert.Equal(t, "req-123", report.ContentMetadata["request_id"])
+					assert.Equal(t, "user-789", report.ContentMetadata["user_id"])
+				}
 			}
 		})
 	}
@@ -694,6 +867,31 @@ func TestContentTypes(t *testing.T) {
 		assert.Equal(t, "Hello, world!", proto.GetText())
 	})
 
+	t.Run("text content with metadata", func(t *testing.T) {
+		content := NewTextContent("Hello, world!").
+			AddMetadata("user_id", "12345").
+			AddMetadata("session_id", "abc-def-ghi").
+			AddMetadata("source", "mobile_app")
+
+		proto, err := content.toProtoContentData()
+		assert.NoError(t, err)
+		assert.Equal(t, "Hello, world!", proto.GetText())
+		assert.NotNil(t, proto.Metadata)
+		assert.Equal(t, "12345", proto.Metadata["user_id"])
+		assert.Equal(t, "abc-def-ghi", proto.Metadata["session_id"])
+		assert.Equal(t, "mobile_app", proto.Metadata["source"])
+	})
+
+	t.Run("text content metadata override", func(t *testing.T) {
+		content := NewTextContent("Test").
+			AddMetadata("key", "value1").
+			AddMetadata("key", "value2") // Should override
+
+		proto, err := content.toProtoContentData()
+		assert.NoError(t, err)
+		assert.Equal(t, "value2", proto.Metadata["key"])
+	})
+
 	t.Run("image content from file", func(t *testing.T) {
 		// Create a temporary image file for testing
 		tmpFile, err := os.CreateTemp("", "test-image-*.png")
@@ -712,6 +910,30 @@ func TestContentTypes(t *testing.T) {
 		assert.Equal(t, testData, proto.GetImage())
 	})
 
+	t.Run("image content from file with metadata", func(t *testing.T) {
+		// Create a temporary image file for testing
+		tmpFile, err := os.CreateTemp("", "test-image-*.png")
+		assert.NoError(t, err)
+		defer os.Remove(tmpFile.Name())
+
+		// Write some test data
+		testData := []byte{0x89, 0x50, 0x4E, 0x47} // PNG header
+		_, err = tmpFile.Write(testData)
+		assert.NoError(t, err)
+		tmpFile.Close()
+
+		content := NewImageFileContent(tmpFile.Name()).
+			AddMetadata("filename", "user_upload.png").
+			AddMetadata("upload_timestamp", "2024-01-15T10:30:00Z")
+
+		proto, err := content.toProtoContentData()
+		assert.NoError(t, err)
+		assert.Equal(t, testData, proto.GetImage())
+		assert.NotNil(t, proto.Metadata)
+		assert.Equal(t, "user_upload.png", proto.Metadata["filename"])
+		assert.Equal(t, "2024-01-15T10:30:00Z", proto.Metadata["upload_timestamp"])
+	})
+
 	t.Run("image content from bytes", func(t *testing.T) {
 		imageData := []byte{0xFF, 0xD8, 0xFF} // JPEG header
 		content := NewImageContent(imageData)
@@ -721,10 +943,52 @@ func TestContentTypes(t *testing.T) {
 		assert.Equal(t, imageData, proto.GetImage())
 	})
 
+	t.Run("image content from bytes with metadata", func(t *testing.T) {
+		imageData := []byte{0xFF, 0xD8, 0xFF} // JPEG header
+		content := NewImageContent(imageData).
+			AddMetadata("format", "jpeg").
+			AddMetadata("size", "1024")
+
+		proto, err := content.toProtoContentData()
+		assert.NoError(t, err)
+		assert.Equal(t, imageData, proto.GetImage())
+		assert.NotNil(t, proto.Metadata)
+		assert.Equal(t, "jpeg", proto.Metadata["format"])
+		assert.Equal(t, "1024", proto.Metadata["size"])
+	})
+
+	t.Run("image URL content with metadata", func(t *testing.T) {
+		content := NewImageURLContent("https://example.com/image.jpg").
+			AddMetadata("source_domain", "example.com").
+			AddMetadata("referrer", "https://example.com/page")
+
+		proto, err := content.toProtoContentData()
+		assert.NoError(t, err)
+		assert.Equal(t, "https://example.com/image.jpg", proto.GetImageUrl())
+		assert.NotNil(t, proto.Metadata)
+		assert.Equal(t, "example.com", proto.Metadata["source_domain"])
+		assert.Equal(t, "https://example.com/page", proto.Metadata["referrer"])
+	})
+
 	t.Run("image content from non-existent file", func(t *testing.T) {
 		content := NewImageFileContent("/non/existent/file.png")
 		_, err := content.toProtoContentData()
 		assert.Error(t, err)
+	})
+
+	t.Run("chaining metadata calls", func(t *testing.T) {
+		// Test that the fluent interface works correctly
+		content := NewTextContent("Chain test").
+			AddMetadata("first", "1").
+			AddMetadata("second", "2").
+			AddMetadata("third", "3")
+
+		proto, err := content.toProtoContentData()
+		assert.NoError(t, err)
+		assert.Len(t, proto.Metadata, 3)
+		assert.Equal(t, "1", proto.Metadata["first"])
+		assert.Equal(t, "2", proto.Metadata["second"])
+		assert.Equal(t, "3", proto.Metadata["third"])
 	})
 }
 
@@ -830,6 +1094,11 @@ func TestReportConversion(t *testing.T) {
 	report := &sharedv1.PolicyEvaluationReport{
 		PolicyId:  "policy-123",
 		Threshold: 0.7,
+		ContentMetadata: map[string]string{
+			"content_id":   "content-789",
+			"user_id":      "user-456",
+			"request_time": "2024-01-15T10:30:00Z",
+		},
 		ReviewResult: &sharedv1.PolicyEvaluationReport_ReviewResult{
 			Outcome: sharedv1.Outcome_OUTCOME_TRUE,
 			Score:   0.85,
@@ -860,6 +1129,13 @@ func TestReportConversion(t *testing.T) {
 	assert.Equal(t, 0.7, converted.Threshold)
 	assert.Equal(t, OutcomeTrue, converted.Result)
 	assert.Len(t, converted.LabelReports, 2)
+
+	// Check ContentMetadata conversion
+	assert.NotNil(t, converted.ContentMetadata)
+	assert.Len(t, converted.ContentMetadata, 3)
+	assert.Equal(t, "content-789", converted.ContentMetadata["content_id"])
+	assert.Equal(t, "user-456", converted.ContentMetadata["user_id"])
+	assert.Equal(t, "2024-01-15T10:30:00Z", converted.ContentMetadata["request_time"])
 
 	// Check label reports
 	toxicity, ok := converted.LabelReports["toxicity"]

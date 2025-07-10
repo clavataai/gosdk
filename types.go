@@ -83,7 +83,10 @@ type Contenter interface {
 
 // NewTextContent can be used to create a text input to send to the API.
 func NewTextContent(text string) Contenter {
-	return &textContent{text: text}
+	return &textContent{
+		text:     text,
+		metadata: make(map[string]string),
+	}
 }
 
 type textContent struct {
@@ -108,7 +111,10 @@ func (t *textContent) toProtoContentData() (*sharedv1.ContentData, error) {
 
 // NewImageContent can be used to create an image input to send to the API.
 func NewImageContent(imageData []byte) Contenter {
-	return &imageContent{imageData: imageData}
+	return &imageContent{
+		imageData: imageData,
+		metadata:  make(map[string]string),
+	}
 }
 
 type imageContent struct {
@@ -134,7 +140,10 @@ func (i *imageContent) toProtoContentData() (*sharedv1.ContentData, error) {
 // NewImageFileContent can be used to create an image input from a file available on the local file
 // system to send to the API.
 func NewImageFileContent(imageFile string) Contenter {
-	return &imageFileContent{imageFile: imageFile}
+	return &imageFileContent{
+		imageFile: imageFile,
+		metadata:  make(map[string]string),
+	}
 }
 
 type imageFileContent struct {
@@ -164,7 +173,10 @@ func (i *imageFileContent) toProtoContentData() (*sharedv1.ContentData, error) {
 
 // NewImageURLContent can be used to create an image input from a URL to send to the API.
 func NewImageURLContent(imageURL string) Contenter {
-	return &imageURLContent{imageURL: imageURL}
+	return &imageURLContent{
+		imageURL: imageURL,
+		metadata: make(map[string]string),
+	}
 }
 
 type imageURLContent struct {
